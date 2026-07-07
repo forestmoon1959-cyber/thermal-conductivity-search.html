@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>湿り空気状態計算</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7f8;
+      --ink: #19232b;
+      --muted: #62717d;
+      --line: #d9e1e6;
+      --panel: #ffffff;
+      --accent: #0f7b8a;
+      --accent-2: #b5532a;
+      --soft: #e8f4f5;
+      --bad: #b42318;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    main {
+      width: min(1120px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 36px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 0 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.65rem, 3vw, 2.5rem);
+      line-height: 1.1;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .pressure {
+      display: grid;
+      gap: 6px;
+      min-width: 188px;
+    }
+
+    label,
+    .label {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 650;
+    }
+
+    input,
+    button {
+      font: inherit;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px 10px;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.02fr) minmax(330px, 0.98fr);
+      gap: 22px;
+      margin-top: 22px;
+      align-items: start;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .section-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.45;
+    }
+
+    .input-list {
+      display: grid;
+      padding: 8px 0;
+    }
+
+    .state-row {
+      display: grid;
+      grid-template-columns: 34px minmax(130px, 1fr) minmax(120px, 160px) 78px;
+      gap: 10px;
+      align-items: center;
+      min-height: 58px;
+      padding: 8px 16px;
+      border-bottom: 1px solid #edf1f3;
+    }
+
+    .state-row:last-child {
+      border-bottom: 0;
+    }
+
+    .name {
+      display: grid;
+      gap: 2px;
+    }
+
+    .jp {
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .symbol {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .unit {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .results {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .result-cell {
+      background: var(--panel);
+      min-height: 96px;
+      padding: 14px;
+      display: grid;
+      align-content: space-between;
+      gap: 8px;
+    }
+
+    .result-cell:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+
+    .result-cell .value {
+      font-size: clamp(1.35rem, 2.8vw, 2rem);
+      font-weight: 760;
+      line-height: 1;
+      overflow-wrap: anywhere;
+    }
+
+    .status {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: var(--soft);
+      color: #16454b;
+      line-height: 1.55;
+      font-size: 0.92rem;
+    }
+
+    .status.error {
+      background: #fff1f0;
+      color: var(--bad);
+      border: 1px solid #ffd0cc;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 14px 16px 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 680;
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .formula-note {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      padding: 13px 16px 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    @media (max-width: 820px) {
+      main {
+        width: min(100vw - 20px, 620px);
+        padding-top: 18px;
+      }
+
+      header,
+      .layout {
+        grid-template-columns: 1fr;
+        display: grid;
+      }
+
+      .pressure {
+        min-width: 0;
+      }
+
+      .state-row {
+        grid-template-columns: 28px minmax(0, 1fr) minmax(94px, 128px) 62px;
+        gap: 8px;
+        padding-inline: 10px;
+      }
+
+      .results {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      body {
+        background: #eef3f5;
+        font-size: 16px;
+      }
+
+      main {
+        width: 100%;
+        padding: calc(12px + env(safe-area-inset-top)) 10px calc(22px + env(safe-area-inset-bottom));
+      }
+
+      header {
+        gap: 12px;
+        padding: 0 2px 12px;
+      }
+
+      h1 {
+        font-size: 1.45rem;
+        line-height: 1.15;
+      }
+
+      .hint {
+        font-size: 0.78rem;
+      }
+
+      .pressure {
+        grid-template-columns: 1fr minmax(112px, 42%) 34px;
+        align-items: end;
+        gap: 8px;
+      }
+
+      .pressure label {
+        padding-bottom: 10px;
+      }
+
+      .pressure .unit {
+        padding-bottom: 11px;
+      }
+
+      .layout {
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      section {
+        border-radius: 8px;
+      }
+
+      .section-head {
+        padding: 12px;
+        align-items: start;
+      }
+
+      .section-head .hint {
+        text-align: right;
+      }
+
+      .input-list {
+        padding: 0;
+      }
+
+      .state-row {
+        grid-template-columns: 30px minmax(0, 1fr);
+        grid-template-areas:
+          "check name"
+          ". field";
+        min-height: auto;
+        gap: 8px 10px;
+        padding: 12px;
+      }
+
+      .state-row input[type="checkbox"] {
+        grid-area: check;
+        width: 22px;
+        height: 22px;
+        align-self: center;
+      }
+
+      .state-row .name {
+        grid-area: name;
+      }
+
+      .state-row input[type="number"] {
+        grid-area: field;
+        min-height: 46px;
+        padding: 10px 82px 10px 12px;
+        font-size: 16px;
+      }
+
+      .state-row .unit {
+        grid-area: field;
+        justify-self: end;
+        align-self: center;
+        max-width: 76px;
+        padding-right: 10px;
+        text-align: right;
+        pointer-events: none;
+      }
+
+      .jp {
+        font-size: 0.98rem;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 12px;
+      }
+
+      button {
+        min-height: 48px;
+        padding: 10px 12px;
+        font-size: 0.98rem;
+      }
+
+      button.primary {
+        grid-column: 1 / -1;
+      }
+
+      .formula-note {
+        padding: 11px 12px 13px;
+        font-size: 0.75rem;
+      }
+
+      .results {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 10px;
+        background: #f3f7f8;
+      }
+
+      .result-cell,
+      .result-cell:last-child:nth-child(odd) {
+        grid-column: auto;
+      }
+
+      .result-cell {
+        min-height: 76px;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        align-content: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        gap: 10px;
+      }
+
+      .result-cell .value {
+        font-size: 1.5rem;
+        text-align: right;
+        min-width: 92px;
+      }
+
+      .status {
+        margin-top: 10px;
+        padding: 11px 12px;
+        font-size: 0.82rem;
+      }
+    }
+
+    /* iPhone-first layout: keep the tool in a phone-sized single column even on desktop Safari. */
+    body {
+      background: #eef3f5;
+      font-size: 16px;
+    }
+
+    main {
+      width: min(100%, 430px);
+      padding: calc(12px + env(safe-area-inset-top)) 10px calc(22px + env(safe-area-inset-bottom));
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      padding: 0 2px 12px;
+    }
+
+    h1 {
+      font-size: 1.45rem;
+      line-height: 1.15;
+    }
+
+    .hint {
+      font-size: 0.78rem;
+    }
+
+    .pressure {
+      min-width: 0;
+      grid-template-columns: 1fr minmax(112px, 42%) 34px;
+      align-items: end;
+      gap: 8px;
+    }
+
+    .pressure label {
+      padding-bottom: 10px;
+    }
+
+    .pressure .unit {
+      padding-bottom: 11px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    section {
+      border-radius: 8px;
+    }
+
+    .section-head {
+      padding: 12px;
+      align-items: start;
+    }
+
+    .section-head .hint {
+      text-align: right;
+    }
+
+    .input-list {
+      padding: 0;
+    }
+
+    .state-row {
+      grid-template-columns: 30px minmax(0, 1fr);
+      grid-template-areas:
+        "check name"
+        ". field";
+      min-height: auto;
+      gap: 8px 10px;
+      padding: 12px;
+    }
+
+    .state-row input[type="checkbox"] {
+      grid-area: check;
+      width: 22px;
+      height: 22px;
+      align-self: center;
+    }
+
+    .state-row .name {
+      grid-area: name;
+    }
+
+    .state-row input[type="number"] {
+      grid-area: field;
+      min-height: 46px;
+      padding: 10px 82px 10px 12px;
+      font-size: 16px;
+    }
+
+    .state-row .unit {
+      grid-area: field;
+      justify-self: end;
+      align-self: center;
+      max-width: 76px;
+      padding-right: 10px;
+      text-align: right;
+      pointer-events: none;
+    }
+
+    .jp {
+      font-size: 0.98rem;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 12px;
+    }
+
+    button {
+      min-height: 48px;
+      padding: 10px 12px;
+      font-size: 0.98rem;
+    }
+
+    button.primary {
+      grid-column: 1 / -1;
+    }
+
+    .formula-note {
+      padding: 11px 12px 13px;
+      font-size: 0.75rem;
+    }
+
+    .results {
+      grid-template-columns: 1fr;
+      gap: 8px;
+      padding: 10px;
+      background: #f3f7f8;
+    }
+
+    .result-cell,
+    .result-cell:last-child:nth-child(odd) {
+      grid-column: auto;
+    }
+
+    .result-cell {
+      min-height: 76px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      align-content: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      gap: 10px;
+    }
+
+    .result-cell .value {
+      font-size: 1.5rem;
+      text-align: right;
+      min-width: 92px;
+    }
+
+    .status {
+      margin-top: 10px;
+      padding: 11px 12px;
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>湿り空気状態計算</h1>
+        <div class="hint">入力に使う状態量を2つ選択してください。選んだ値から他の状態量を計算します。</div>
+      </div>
+      <div class="pressure">
+        <label for="pressure">大気圧</label>
+        <input id="pressure" type="number" inputmode="decimal" step="0.001" value="101.325">
+        <div class="unit">kPa</div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <section aria-labelledby="inputTitle">
+        <div class="section-head">
+          <h2 id="inputTitle">入力</h2>
+          <div class="hint" id="selectedCount">2項目を選択</div>
+        </div>
+        <div class="input-list" id="inputList"></div>
+        <div class="actions">
+          <button class="primary" id="calcButton" type="button">計算</button>
+          <button id="exampleButton" type="button">例を入力</button>
+          <button id="clearButton" type="button">クリア</button>
+        </div>
+        <div class="formula-note">
+          単位は乾球・湿球・露点温度が degC、相対湿度が %、エンタルピが kJ/kg(DA)、絶対湿度が kg/kg(DA)、比体積が m3/kg(DA) です。
+        </div>
+      </section>
+
+      <div>
+        <section aria-labelledby="resultTitle">
+          <div class="section-head">
+            <h2 id="resultTitle">計算結果</h2>
+            <div class="hint" id="baseState"></div>
+          </div>
+          <div class="results" id="results"></div>
+        </section>
+        <div class="status" id="status">乾球温度と相対湿度など、任意の2項目を選んで値を入力してください。</div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const PROPS = [
+      { key: "tdb", name: "乾球温度", symbol: "Tdb", unit: "degC", scale: 1 },
+      { key: "rh", name: "相対湿度", symbol: "RH", unit: "%", scale: 3 },
+      { key: "h", name: "エンタルピ", symbol: "h", unit: "kJ/kg(DA)", scale: 2 },
+      { key: "twb", name: "湿球温度", symbol: "Twb", unit: "degC", scale: 1 },
+      { key: "w", name: "絶対湿度", symbol: "x", unit: "kg/kg(DA)", scale: 0.0015 },
+      { key: "v", name: "比体積", symbol: "v", unit: "m3/kg(DA)", scale: 0.02 },
+      { key: "tdp", name: "露点温度", symbol: "Tdp", unit: "degC", scale: 1 }
+    ];
+
+    const defaults = {
+      tdb: "26",
+      rh: "50",
+      h: "",
+      twb: "",
+      w: "",
+      v: "",
+      tdp: ""
+    };
+
+    const inputList = document.querySelector("#inputList");
+    const resultsEl = document.querySelector("#results");
+    const statusEl = document.querySelector("#status");
+    const pressureEl = document.querySelector("#pressure");
+    const selectedCountEl = document.querySelector("#selectedCount");
+    const baseStateEl = document.querySelector("#baseState");
+
+    function satPressureKPa(t) {
+      const c = t >= 0
+        ? { a: 6.112, b: 17.62, c: 243.12 }
+        : { a: 6.112, b: 22.46, c: 272.62 };
+      return c.a * Math.exp((c.b * t) / (c.c + t)) / 10;
+    }
+
+    function humidityRatioFromPv(pv, p) {
+      return 0.621945 * pv / Math.max(0.001, p - pv);
+    }
+
+    function vaporPressureFromW(w, p) {
+      return p * w / (0.621945 + w);
+    }
+
+    function satHumidityRatio(t, p) {
+      const ps = satPressureKPa(t);
+      if (ps >= p) return Infinity;
+      return humidityRatioFromPv(ps, p);
+    }
+
+    function enthalpy(t, w) {
+      return 1.006 * t + w * (2501 + 1.86 * t);
+    }
+
+    function specificVolume(t, w, p) {
+      return 0.287042 * (t + 273.15) * (1 + 1.607858 * w) / p;
+    }
+
+    function dewPoint(t, w, p) {
+      const pv = Math.max(0.00001, vaporPressureFromW(w, p));
+      let lo = -80;
+      let hi = Math.min(100, t + 30);
+      for (let i = 0; i < 80; i++) {
+        const mid = (lo + hi) / 2;
+        if (satPressureKPa(mid) < pv) lo = mid;
+        else hi = mid;
+      }
+      return (lo + hi) / 2;
+    }
+
+    function wetBulb(t, w, p) {
+      const h = enthalpy(t, w);
+      let lo = -80;
+      let hi = t;
+      for (let i = 0; i < 90; i++) {
+        const mid = (lo + hi) / 2;
+        const ws = satHumidityRatio(mid, p);
+        const hStar = enthalpy(mid, ws) - (ws - w) * 4.186 * mid;
+        if (hStar < h) lo = mid;
+        else hi = mid;
+      }
+      return (lo + hi) / 2;
+    }
+
+    function propertiesFromState(t, w, p) {
+      const ps = satPressureKPa(t);
+      const pv = vaporPressureFromW(w, p);
+      const rh = 100 * pv / ps;
+      return {
+        tdb: t,
+        rh,
+        h: enthalpy(t, w),
+        twb: wetBulb(t, w, p),
+        w,
+        v: specificVolume(t, w, p),
+        tdp: dewPoint(t, w, p)
+      };
+    }
+
+    function finite(value) {
+      return Number.isFinite(value) && !Number.isNaN(value);
+    }
+
+    function clampState(t, y, p) {
+      const nextT = Math.min(100, Math.max(-60, t));
+      const satW = satHumidityRatio(nextT, p);
+      const maxW = Math.min(0.2, Math.max(0.000001, satW * 1.0001));
+      const nextW = Math.min(maxW, Math.max(0.000001, Math.exp(Math.min(Math.log(0.2), Math.max(Math.log(0.000001), y)))));
+      return [nextT, Math.log(nextW)];
+    }
+
+    function solveState(inputs, p) {
+      const targets = inputs.map((item) => {
+        const prop = PROPS.find((candidate) => candidate.key === item.key);
+        return { ...item, scale: prop.scale };
+      });
+
+      const tHint = targets.find((item) => item.key === "tdb")?.value
+        ?? targets.find((item) => item.key === "tdp")?.value
+        ?? targets.find((item) => item.key === "twb")?.value
+        ?? 25;
+      const wHint = targets.find((item) => item.key === "w")?.value;
+      const starts = [
+        [tHint, Math.log(wHint ?? 0.010)],
+        [tHint + 5, Math.log(wHint ?? 0.014)],
+        [tHint - 8, Math.log(wHint ?? 0.006)],
+        [10, Math.log(0.004)],
+        [25, Math.log(0.010)],
+        [40, Math.log(0.020)]
+      ];
+
+      let best = null;
+
+      for (const start of starts) {
+        let [t, y] = clampState(start[0], start[1], p);
+        let score = Infinity;
+
+        for (let iter = 0; iter < 80; iter++) {
+          const current = evalResidual(t, y, targets, p);
+          score = current.score;
+          if (score < 1e-10) break;
+
+          const dt = 0.03;
+          const dy = 0.003;
+          const rt = evalResidual(t + dt, y, targets, p).r.map((value, idx) => (value - current.r[idx]) / dt);
+          const ry = evalResidual(t, y + dy, targets, p).r.map((value, idx) => (value - current.r[idx]) / dy);
+
+          const a = rt.reduce((sum, value) => sum + value * value, 0) + 1e-8;
+          const b = rt.reduce((sum, value, idx) => sum + value * ry[idx], 0);
+          const c = ry.reduce((sum, value) => sum + value * value, 0) + 1e-8;
+          const g1 = rt.reduce((sum, value, idx) => sum + value * current.r[idx], 0);
+          const g2 = ry.reduce((sum, value, idx) => sum + value * current.r[idx], 0);
+          const det = a * c - b * b;
+          if (Math.abs(det) < 1e-12) break;
+
+          const stepT = (-g1 * c + b * g2) / det;
+          const stepY = (b * g1 - a * g2) / det;
+
+          let accepted = false;
+          for (const factor of [1, 0.5, 0.25, 0.1, 0.04, 0.015]) {
+            const candidate = clampState(t + stepT * factor, y + stepY * factor, p);
+            const next = evalResidual(candidate[0], candidate[1], targets, p);
+            if (next.score < score) {
+              [t, y] = candidate;
+              score = next.score;
+              accepted = true;
+              break;
+            }
+          }
+          if (!accepted) break;
+        }
+
+        const finalEval = evalResidual(t, y, targets, p);
+        if (!best || finalEval.score < best.score) {
+          best = { t, w: Math.exp(y), score: finalEval.score };
+        }
+      }
+
+      if (!best || best.score > 0.0005) {
+        throw new Error("入力された2項目の組み合わせから、物理的に整合する状態を見つけられませんでした。値と単位を確認してください。");
+      }
+
+      const props = propertiesFromState(best.t, best.w, p);
+      if (props.rh > 100.2 || props.rh < 0) {
+        throw new Error("計算結果が飽和範囲を外れました。相対湿度は0から100%の範囲で入力してください。");
+      }
+      return props;
+    }
+
+    function evalResidual(t, y, targets, p) {
+      const props = propertiesFromState(t, Math.exp(y), p);
+      const r = targets.map((target) => (props[target.key] - target.value) / target.scale);
+      const penalty = Math.max(0, props.rh - 100) / 3 + Math.max(0, -props.rh) / 3;
+      const score = r.reduce((sum, value) => sum + value * value, 0) + penalty * penalty;
+      return { r, score };
+    }
+
+    function formatValue(key, value) {
+      if (!finite(value)) return "-";
+      if (key === "w") return value.toFixed(5);
+      if (key === "v") return value.toFixed(4);
+      if (key === "rh") return value.toFixed(1);
+      if (key === "h") return value.toFixed(2);
+      return value.toFixed(2);
+    }
+
+    function selectedInputs() {
+      return PROPS
+        .map((prop) => {
+          const checked = document.querySelector(`#use-${prop.key}`).checked;
+          const raw = document.querySelector(`#value-${prop.key}`).value.trim();
+          const value = Number(raw);
+          return checked ? { key: prop.key, value, raw } : null;
+        })
+        .filter(Boolean);
+    }
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle("error", isError);
+    }
+
+    function calculate() {
+      const chosen = selectedInputs();
+      selectedCountEl.textContent = `${chosen.length}項目を選択`;
+      if (chosen.length !== 2) {
+        baseStateEl.textContent = "";
+        setStatus("入力に使う項目をちょうど2つ選択してください。", true);
+        return;
+      }
+      if (chosen.some((item) => item.raw === "" || !finite(item.value))) {
+        setStatus("選択した2項目の数値を入力してください。", true);
+        return;
+      }
+      if (chosen.some((item) => item.key === "w") && chosen.some((item) => item.key === "tdp")) {
+        baseStateEl.textContent = "";
+        setStatus("絶対湿度と露点温度は同じ水蒸気量を表すため、この2項目だけでは乾球温度が一意に決まりません。別の状態量を1つ選んでください。", true);
+        return;
+      }
+
+      const p = Number(pressureEl.value);
+      if (!finite(p) || p <= 0) {
+        setStatus("大気圧は0より大きい数値で入力してください。", true);
+        return;
+      }
+
+      try {
+        const props = solveState(chosen, p);
+        renderResults(props);
+        baseStateEl.textContent = `Tdb ${formatValue("tdb", props.tdb)} degC / x ${formatValue("w", props.w)} kg/kg(DA)`;
+        setStatus("計算できました。選択中の2項目を変えると再計算します。");
+      } catch (error) {
+        baseStateEl.textContent = "";
+        setStatus(error.message, true);
+      }
+    }
+
+    function renderInputs() {
+      inputList.innerHTML = "";
+      for (const prop of PROPS) {
+        const row = document.createElement("div");
+        row.className = "state-row";
+        row.innerHTML = `
+          <input id="use-${prop.key}" type="checkbox" ${prop.key === "tdb" || prop.key === "rh" ? "checked" : ""} aria-label="${prop.name}を入力に使う">
+          <div class="name">
+            <div class="jp">${prop.name}</div>
+            <div class="symbol">${prop.symbol}</div>
+          </div>
+          <input id="value-${prop.key}" type="number" inputmode="decimal" step="any" value="${defaults[prop.key]}" aria-label="${prop.name}">
+          <div class="unit">${prop.unit}</div>
+        `;
+        inputList.appendChild(row);
+      }
+      inputList.addEventListener("input", calculate);
+      inputList.addEventListener("change", (event) => {
+        if (event.target.type === "checkbox") {
+          const checked = [...inputList.querySelectorAll("input[type='checkbox']:checked")];
+          if (checked.length > 2) {
+            checked.find((box) => box !== event.target).checked = false;
+          }
+        }
+        calculate();
+      });
+    }
+
+    function renderResults(props = null) {
+      resultsEl.innerHTML = "";
+      for (const prop of PROPS) {
+        const cell = document.createElement("div");
+        cell.className = "result-cell";
+        cell.innerHTML = `
+          <div>
+            <div class="label">${prop.name}</div>
+            <div class="symbol">${prop.symbol} / ${prop.unit}</div>
+          </div>
+          <div class="value">${props ? formatValue(prop.key, props[prop.key]) : "-"}</div>
+        `;
+        resultsEl.appendChild(cell);
+      }
+    }
+
+    function clearAll() {
+      for (const prop of PROPS) {
+        document.querySelector(`#value-${prop.key}`).value = "";
+        document.querySelector(`#use-${prop.key}`).checked = false;
+      }
+      renderResults();
+      calculate();
+    }
+
+    function setExample() {
+      for (const prop of PROPS) {
+        document.querySelector(`#value-${prop.key}`).value = "";
+        document.querySelector(`#use-${prop.key}`).checked = false;
+      }
+      document.querySelector("#use-tdb").checked = true;
+      document.querySelector("#use-rh").checked = true;
+      document.querySelector("#value-tdb").value = "26";
+      document.querySelector("#value-rh").value = "50";
+      pressureEl.value = "101.325";
+      calculate();
+    }
+
+    document.querySelector("#calcButton").addEventListener("click", calculate);
+    document.querySelector("#exampleButton").addEventListener("click", setExample);
+    document.querySelector("#clearButton").addEventListener("click", clearAll);
+    pressureEl.addEventListener("input", calculate);
+
+    renderInputs();
+    renderResults();
+    calculate();
+  </script>
+</body>
+</html>
